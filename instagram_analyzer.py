@@ -9,6 +9,18 @@ import json
 import os
 from datetime import datetime
 
+EXCLUSIONS_FILE = "excluded_accounts.txt"
+FILES_TO_CLEAN_UP = [
+    "followers_1.json",
+    "following.json",
+    "followers_usernames.txt",
+    "followers_usernames.json",
+    "following_usernames.txt",
+    "following_usernames.json",
+    "relationship_analysis.txt",
+    "relationship_analysis.json",
+]
+
 def extract_followers_from_json(json_file_path):
     """
     Extract all usernames from the followers JSON file.
@@ -66,12 +78,23 @@ def extract_following_from_json(json_file_path):
         if 'relationships_following' in data:
             # Iterate through each entry in the relationships_following array
             for entry in data['relationships_following']:
-                # Check if string_list_data exists and is not empty
-                if 'string_list_data' in entry and entry['string_list_data']:
-                    # Extract the value (username) from each item in string_list_data
+                # Skip empty objects or entries without required fields
+                if not entry or not isinstance(entry, dict):
+                    continue
+                
+                # The username is in the 'title' field
+                if 'title' in entry:
+                    username = entry['title']
+                    # Only add non-empty usernames
+                    if username and isinstance(username, str):
+                        usernames.add(username.strip())
+                # Fallback: check string_list_data for 'value' field (older format)
+                elif 'string_list_data' in entry and entry['string_list_data']:
                     for string_data in entry['string_list_data']:
-                        if 'value' in string_data:
-                            usernames.add(string_data['value'])
+                        if isinstance(string_data, dict) and 'value' in string_data:
+                            username = string_data['value']
+                            if username and isinstance(username, str):
+                                usernames.add(username.strip())
         else:
             print("❌ Error: 'relationships_following' key not found in the following JSON file.")
             return set()
@@ -113,6 +136,45 @@ def save_usernames_to_files(usernames, prefix):
     except Exception as e:
         print(f"❌ Error saving {prefix} files: {e}")
 
+def load_excluded_usernames(file_path):
+    """Load usernames to exclude from analysis."""
+    excluded_usernames = set()
+
+    if not os.path.exists(file_path):
+        return excluded_usernames
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            for line in file:
+                username = line.strip()
+                if username and not username.startswith('#'):
+                    excluded_usernames.add(username)
+        return excluded_usernames
+    except Exception as e:
+        print(f"❌ Error loading exclusions from '{file_path}': {e}")
+        return set()
+
+def cleanup_generated_files(files_to_delete):
+    """Delete generated analysis files after the report is complete."""
+    print()
+    print("🧹 CLEANUP STEP")
+    print("-" * 40)
+
+    deleted_count = 0
+
+    for filename in files_to_delete:
+        if os.path.exists(filename):
+            try:
+                os.remove(filename)
+                print(f"✅ Deleted: {filename}")
+                deleted_count += 1
+            except Exception as e:
+                print(f"❌ Could not delete {filename}: {e}")
+        else:
+            print(f"ℹ️  Not found: {filename}")
+
+    print(f"\n✅ Cleanup complete. Deleted {deleted_count} file(s).")
+
 def create_relationship_analysis(followers, following):
     """
     Create comprehensive relationship analysis and save to files.
@@ -121,10 +183,17 @@ def create_relationship_analysis(followers, following):
         followers (set): Set of follower usernames
         following (set): Set of following usernames
     """
-    # Calculate relationships
-    mutual_followers = followers.intersection(following)
-    not_following_back = following.difference(followers)
-    you_dont_follow_back = followers.difference(following)
+    # Load exclusion list and remove those accounts from the comparison
+    excluded_accounts = load_excluded_usernames(EXCLUSIONS_FILE)
+    applied_exclusions = excluded_accounts.intersection(followers.union(following))
+
+    filtered_followers = followers.difference(applied_exclusions)
+    filtered_following = following.difference(applied_exclusions)
+
+    # Calculate relationships using the filtered sets
+    mutual_followers = filtered_followers.intersection(filtered_following)
+    not_following_back = filtered_following.difference(filtered_followers)
+    you_dont_follow_back = filtered_followers.difference(filtered_following)
     
     # Create timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -141,11 +210,21 @@ def create_relationship_analysis(followers, following):
             # Write summary
             file.write("SUMMARY:\n")
             file.write("-"*40 + "\n")
-            file.write(f"Total Followers: {len(followers):,}\n")
-            file.write(f"Total Following: {len(following):,}\n")
+            file.write(f"Raw Followers: {len(followers):,}\n")
+            file.write(f"Raw Following: {len(following):,}\n")
+            file.write(f"Excluded Accounts: {len(applied_exclusions):,}\n")
+            file.write(f"Filtered Followers: {len(filtered_followers):,}\n")
+            file.write(f"Filtered Following: {len(filtered_following):,}\n")
             file.write(f"Mutual Followers: {len(mutual_followers):,}\n")
             file.write(f"Not Following You Back: {len(not_following_back):,}\n")
             file.write(f"You Don't Follow Back: {len(you_dont_follow_back):,}\n\n")
+
+            if applied_exclusions:
+                file.write("EXCLUDED ACCOUNTS:\n")
+                file.write("-"*40 + "\n")
+                for username in sorted(applied_exclusions):
+                    file.write(f"{username}\n")
+                file.write("\n")
             
             # Calculate percentages
             if len(following) > 0:
@@ -218,8 +297,11 @@ def create_relationship_analysis(followers, following):
             analysis_data = {
                 "generated_on": timestamp,
                 "summary": {
-                    "total_followers": len(followers),
-                    "total_following": len(following),
+                    "raw_followers": len(followers),
+                    "raw_following": len(following),
+                    "excluded_accounts": len(applied_exclusions),
+                    "total_followers": len(filtered_followers),
+                    "total_following": len(filtered_following),
                     "mutual_followers": len(mutual_followers),
                     "not_following_back": len(not_following_back),
                     "you_dont_follow_back": len(you_dont_follow_back),
@@ -227,6 +309,7 @@ def create_relationship_analysis(followers, following):
                     "not_following_back_rate": round(not_following_back_percentage, 1),
                     "you_dont_follow_back_rate": round(you_dont_follow_back_percentage, 1)
                 },
+                "excluded_accounts": sorted(list(applied_exclusions)),
                 "mutual_followers": sorted(list(mutual_followers)),
                 "not_following_back": sorted(list(not_following_back)),
                 "you_dont_follow_back": sorted(list(you_dont_follow_back))
@@ -236,7 +319,7 @@ def create_relationship_analysis(followers, following):
     except Exception as e:
         print(f"❌ Error saving JSON analysis: {e}")
     
-    return mutual_followers, not_following_back, you_dont_follow_back
+    return filtered_followers, filtered_following, mutual_followers, not_following_back, you_dont_follow_back, applied_exclusions
 
 def main():
     """Main function to run the complete Instagram relationship analysis."""
@@ -281,14 +364,17 @@ def main():
     print("🔍 STEP 3: Analyzing relationships...")
     print("-" * 40)
     
-    mutual_followers, not_following_back, you_dont_follow_back = create_relationship_analysis(followers, following)
+    filtered_followers, filtered_following, mutual_followers, not_following_back, you_dont_follow_back, applied_exclusions = create_relationship_analysis(followers, following)
     
     # Display summary
     print(f"✅ Analysis complete!")
     print()
     print("📊 SUMMARY:")
-    print(f"   Followers: {len(followers):,}")
-    print(f"   Following: {len(following):,}")
+    print(f"   Raw Followers: {len(followers):,}")
+    print(f"   Raw Following: {len(following):,}")
+    print(f"   Excluded Accounts: {len(applied_exclusions):,}")
+    print(f"   Filtered Followers: {len(filtered_followers):,}")
+    print(f"   Filtered Following: {len(filtered_following):,}")
     print(f"   Mutual: {len(mutual_followers):,}")
     print(f"   Not Following Back: {len(not_following_back):,}")
     print(f"   You Don't Follow Back: {len(you_dont_follow_back):,}")
@@ -300,6 +386,13 @@ def main():
             print(f"   • {username}")
         if len(not_following_back) > 5:
             print(f"   ... and {len(not_following_back) - 5} more")
+
+    if applied_exclusions:
+        print(f"\n🚫 Excluded accounts:")
+        for username in sorted(list(applied_exclusions))[:5]:
+            print(f"   • {username}")
+        if len(applied_exclusions) > 5:
+            print(f"   ... and {len(applied_exclusions) - 5} more")
     
     if you_dont_follow_back:
         print(f"\n👥 Examples of accounts you don't follow back:")
@@ -314,11 +407,18 @@ def main():
     print("-" * 40)
     print("• followers_usernames.txt & .json")
     print("• following_usernames.txt & .json") 
+    print(f"• {EXCLUSIONS_FILE} (persistent exclusion list)")
     print("• relationship_analysis.txt")
     print("• relationship_analysis.json")
     print("="*80)
     print("✅ ANALYSIS COMPLETE! Check the files above for detailed results.")
     print("="*80)
+
+    cleanup_choice = input("\nWould you like to remove the generated analysis files now? (y/N): ").strip().lower()
+    if cleanup_choice in ["y", "yes"]:
+        cleanup_generated_files(FILES_TO_CLEAN_UP)
+    else:
+        print("\nCleanup skipped.")
 
 if __name__ == "__main__":
     main()

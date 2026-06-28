@@ -35,6 +35,7 @@ The script generates the following files:
 ### Relationship Analysis:
 - `relationship_analysis.txt` - **Main analysis file** with comprehensive breakdown
 - `relationship_analysis.json` - Same analysis in JSON format for programming
+- `excluded_accounts.txt` - Persistent list of usernames to omit from future comparisons
 
 ## 📊 What You'll Learn
 
@@ -46,13 +47,19 @@ The analysis shows you:
 - **👥 You Don't Follow Back**: People who follow you but you don't follow them
 - **📊 Percentages**: Mutual follow rates and other metrics
 
-## 🔧 Individual Scripts
+## 🚫 Excluding Ghost or Deactivated Accounts
 
-If you prefer to run parts separately, these scripts are also available:
+If certain usernames show up in your non-mutual results but you know they are ghost, inactive, or deactivated accounts, add them to `excluded_accounts.txt` in the project root. The analyzer will subtract those usernames from future comparisons before calculating relationship counts.
 
-- `extract_followers.py` - Extract only followers data
-- `extract_following.py` - Extract only following data  
-- `compare_relationships.py` - Compare existing extracted data
+The file accepts one username per line, and lines starting with `#` are ignored so you can leave notes in the list.
+
+### Reference Finding
+
+In the current report, 29 accounts in `not_following_back` were identified as likely ghost or deactivated accounts and added to the exclusion list. This is a starting point, not a permanent set. Review `excluded_accounts.txt` periodically and add more accounts as your network changes over time.
+
+## 🧹 Post-Analysis Cleanup
+
+After the report finishes, the analyzer now offers an optional cleanup prompt. If you accept it, the script removes the raw export files and generated analysis outputs so the workspace stays lightweight. The exclusion list is kept in place so your saved ghost/deactivated accounts continue to apply on the next run.
 
 ## 📋 Requirements
 
@@ -72,74 +79,6 @@ If you prefer to run parts separately, these scripts are also available:
 **Permission errors**:
 - Make sure you have write permissions in the directory
 - Try running from a different folder if needed
-
-## 🧹 Cleanup
-
-After running the analysis, you can clean up all generated files to prepare for a fresh analysis:
-
-```bash
-python3 cleanup.py
-```
-
-### What Gets Cleaned Up
-
-The cleanup script removes:
-
-**Input Files:**
-- `followers_1.json` - Your Instagram followers export
-- `following.json` - Your Instagram following export
-
-**Generated Output Files:**
-- `followers_usernames.txt` & `followers_usernames.json`
-- `following_usernames.txt` & `following_usernames.json`  
-- `relationship_analysis.txt` & `relationship_analysis.json`
-
-### Features
-
-- **Interactive confirmation** - Asks before deleting anything
-- **Cross-platform compatibility** - Works on Windows, macOS, and Linux
-- **Detailed feedback** - Shows exactly what was deleted
-- **Safe operation** - Only removes known analysis files
-- **Summary report** - Displays cleanup statistics
-
-### Example Output
-
-```
-🧹 Instagram Analyzer Cleanup Script
-==================================================
-
-This script will delete the following files:
-• followers_1.json
-• following.json
-• followers_usernames.txt
-• followers_usernames.json
-• following_usernames.txt
-• following_usernames.json
-• relationship_analysis.txt
-• relationship_analysis.json
-
-Are you sure you want to delete these files? (y/N): y
-
-✅ Deleted: followers_1.json
-✅ Deleted: following.json
-✅ Deleted: followers_usernames.txt
-✅ Deleted: followers_usernames.json
-✅ Deleted: following_usernames.txt
-✅ Deleted: following_usernames.json
-✅ Deleted: relationship_analysis.txt
-✅ Deleted: relationship_analysis.json
-
-==================================================
-📊 CLEANUP SUMMARY:
-   Files deleted: 8
-   Files not found: 0
-   Total files processed: 8
-
-✅ Cleanup complete! The workspace is now clean for future analysis.
-==================================================
-```
-
-**💡 Tip**: Use the cleanup script between different Instagram data exports to ensure you're working with fresh data each time.
 
 ---
 
