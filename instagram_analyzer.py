@@ -66,12 +66,23 @@ def extract_following_from_json(json_file_path):
         if 'relationships_following' in data:
             # Iterate through each entry in the relationships_following array
             for entry in data['relationships_following']:
-                # Check if string_list_data exists and is not empty
-                if 'string_list_data' in entry and entry['string_list_data']:
-                    # Extract the value (username) from each item in string_list_data
+                # Skip empty objects or entries without required fields
+                if not entry or not isinstance(entry, dict):
+                    continue
+                
+                # The username is in the 'title' field
+                if 'title' in entry:
+                    username = entry['title']
+                    # Only add non-empty usernames
+                    if username and isinstance(username, str):
+                        usernames.add(username.strip())
+                # Fallback: check string_list_data for 'value' field (older format)
+                elif 'string_list_data' in entry and entry['string_list_data']:
                     for string_data in entry['string_list_data']:
-                        if 'value' in string_data:
-                            usernames.add(string_data['value'])
+                        if isinstance(string_data, dict) and 'value' in string_data:
+                            username = string_data['value']
+                            if username and isinstance(username, str):
+                                usernames.add(username.strip())
         else:
             print("❌ Error: 'relationships_following' key not found in the following JSON file.")
             return set()
